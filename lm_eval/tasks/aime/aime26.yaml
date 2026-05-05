@@ -1,14 +1,14 @@
 tag:
   - math_word_problems
-task: aime24
-dataset_path: Maxwell-Jia/AIME_2024
+task: aime26
+dataset_path: MathArena/aime_2026
 # dataset_name: null
 output_type: generate_until
 training_split: train
 fewshot_split: train
 test_split: train
-doc_to_text: "Question: {{Problem}}"
-doc_to_target: "{{Answer}}"
+doc_to_text: "Question: {{problem}}"
+doc_to_target: "{{answer}}"
 process_results: !function utils.process_results
 filter_list:
   - name: keep_repeats

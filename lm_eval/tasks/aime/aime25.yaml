@@ -7,23 +7,24 @@ output_type: generate_until
 training_split: test
 fewshot_split: test
 test_split: test
-doc_to_text: "Question: {{problem}}\nAnswer:"
+doc_to_text: "Question: {{problem}}"
 doc_to_target: "{{answer}}"
 process_results: !function utils.process_results
+filter_list:
+  - name: keep_repeats
+    filter:
+      - function: take_first_k
+        k: 8
 metric_list:
   - metric: exact_match
     aggregation: mean
     higher_is_better: true
 generation_kwargs:
-  until:
-    - "Question:"
-    - "</s>"
-    - "<|im_end|>"
-    - "<|eot_id|>"
-  do_sample: false
-  temperature: 0.0
+  until: []
+  do_sample: true
+  temperature: 0.6
   max_gen_toks: 32768
-repeats: 1
+repeats: 8
 num_fewshot: 0
 metadata:
   version: 0.0

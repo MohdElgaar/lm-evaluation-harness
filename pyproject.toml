@@ -53,8 +53,8 @@ Repository = "https://github.com/EleutherAI/lm-evaluation-harness"
 [project.optional-dependencies]
 # Model backend dependencies
 api = ["requests", "aiohttp", "tenacity", "tqdm", "tiktoken"]
-hf = ["transformers>=4.1","torch>=1.8", "accelerate>=0.26.0", "peft>=0.2.0",]
-vllm = ["vllm>=0.4.2"]
+hf = ["transformers>=5.5.0","torch>=1.8", "accelerate>=0.26.0", "peft>=0.2.0",]
+vllm = ["vllm>=0.19.0", "ray[cgraph]>=2.48.0","torchvision>=0.25.0"]
 gptq = ["auto-gptq[triton]>=0.6.0"]
 gptqmodel = ["gptqmodel>=1.0.9"]
 ipex = ["optimum-intel"]
@@ -72,7 +72,7 @@ acpbench = ["lark>=1.1.9", "tarski[clingo]==0.8.2", "pddl==0.4.2", "kstar-planne
 audiolm_qwen = ["librosa", "soundfile"]
 dev = ["pytest", "pytest-cov", "pytest-xdist", "pre-commit", "requests", "aiohttp", "tenacity", "tqdm", "tiktoken", "sentencepiece", "ruff"]
 ifeval = ["langdetect", "immutabledict", "nltk>=3.9.1"]
-ifbench = ["emoji", "immutabledict", "nltk>=3.9.1", "spacy", "syllapy"]
+ifbench = ["emoji", "immutabledict", "nltk>=3.9.1", "spacy", "syllapy", "pip"]
 japanese_leaderboard = ["emoji==2.14.0", "neologdn==0.5.3", "fugashi[unidic-lite]", "rouge_score>=0.1.2"]
 longbench = ["jieba", "fuzzywuzzy", "rouge"]
 libra = ["pymorphy2"]
@@ -115,6 +115,36 @@ conflicts = [
       { extra = "vllm" },
     ],
 ]
+override-dependencies = ["lark==1.2.2"]
+
+# PyTorch / vLLM CUDA 13.0 wheels — https://docs.astral.sh/uv/guides/integration/pytorch/
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu130", marker = "platform_system == 'Linux' and platform_machine != 'aarch64'" },
+  { index = "pytorch-cu130", marker = "platform_system == 'Linux' and platform_machine == 'aarch64'" },
+]
+torchvision = [
+  { index = "pytorch-cu130", marker = "platform_system == 'Linux' and platform_machine != 'aarch64'"},
+  { index = "pytorch-cu130", marker = "platform_system == 'Linux' and platform_machine == 'aarch64'"},
+]
+torchaudio = [
+  { index = "pytorch-cu130", marker = "platform_system == 'Linux' and platform_machine != 'aarch64'"},
+  { index = "pytorch-cu130", marker = "platform_system == 'Linux' and platform_machine == 'aarch64'"},
+]
+vllm = [
+  { index = "vllm-cu130", marker = "platform_system == 'Linux' and platform_machine != 'aarch64'" },
+  { index = "vllm-cu130", marker = "platform_system == 'Linux' and platform_machine == 'aarch64'" },
+]
+
+[[tool.uv.index]]
+name = "vllm-cu130"
+url = "https://wheels.vllm.ai/nightly/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
 
 [tool.pymarkdown]
 plugins.md013.enabled = false # line-length

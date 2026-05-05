@@ -1,6 +1,61 @@
+import re
 from typing import Dict, List
 
 import datasets
+
+
+def _dollar_delimited_answer_candidates(text: str) -> List[str]:
+    """Extract math answer candidates from LaTeX delimiters.
+
+    Uses the span between the second-to-last and last single ``$`` (OLMes-style),
+    and the last non-empty ``$$ ... $$`` display block as an extra candidate when
+    ``$$`` is present (covers cases where trailing ``$$`` makes the ``$`` pair empty).
+    """
+    out: List[str] = []
+    dollar_pos = [i for i, ch in enumerate(text) if ch == "$"]
+    if len(dollar_pos) >= 2:
+        span = text[dollar_pos[-2] + 1 : dollar_pos[-1]]
+        if span.strip():
+            out.append(span)
+
+    if "$$" in text:
+        last_block = None
+        for m in re.finditer(r"\$\$(.+?)\$\$", text, flags=re.DOTALL):
+            inner = m.group(1).strip()
+            if inner:
+                last_block = inner
+        if last_block is not None:
+            out.append(last_block)
+
+    return out
+
+
+def _dedupe_preserve(xs: List[str]) -> List[str]:
+    return list(dict.fromkeys(x for x in xs if x is not None and str(x).strip()))
+
+
+def _strip_rhs_fences(rhs: str) -> str:
+    """Trim trailing punctuation and stray `$` models emit after ``= …`` extracts."""
+    s = rhs.strip()
+    while s and s[-1] in ".,;!?":
+        s = s[:-1].strip()
+    while s.endswith("$"):
+        s = s[:-1].strip()
+    while s.startswith("$"):
+        s = s[1:].strip()
+    return s.strip()
+
+
+def _equals_rhs_candidates_from(parts: List[str]) -> List[str]:
+    """RHS of last `=` per string — picks out final answers inside dollar-wrapped equations."""
+    out: List[str] = []
+    for t in parts:
+        if not t or "=" not in t:
+            continue
+        rhs = _strip_rhs_fences(t.rsplit("=", 1)[-1])
+        if rhs:
+            out.append(rhs)
+    return out
 
 
 def process_docs(dataset: datasets.Dataset) -> datasets.Dataset:
@@ -16,20 +71,21 @@ def process_docs(dataset: datasets.Dataset) -> datasets.Dataset:
 
 
 def process_results(doc: dict, results: List[str]) -> Dict[str, int]:
+    raw = results[0]
+    gold = remove_boxed(last_boxed_only_string(doc["solution"]))
+
+    candidates: List[str] = []
+    candidates.extend(_dollar_delimited_answer_candidates(raw))
+    candidates.append(raw)
+    candidates.extend(_equals_rhs_candidates_from(candidates))
+
     retval = 0
-    indices = [pos for pos, char in enumerate(results[0]) if char == "$"]
-    if len(indices) <= 1:
-        answer = results[0]
-    else:
-        answer = results[0][indices[0] + 1 : indices[-1]]
+    for answer in _dedupe_preserve(candidates):
+        if is_equiv(answer, gold):
+            retval = 1
+            break
 
-    if is_equiv(answer, remove_boxed(last_boxed_only_string(doc["solution"]))):
-        retval = 1
-
-    results = {
-        "exact_match": retval,
-    }
-    return results
+    return {"exact_match": retval}
 
 
 # string normalization from https://github.com/EleutherAI/lm-evaluation-harness/blob/master/lm_eval/tasks/hendrycks_math.py

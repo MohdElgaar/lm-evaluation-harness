@@ -1,35 +1,100 @@
 import re
-from typing import Dict, List
+from typing import Dict, List, Union
 
 
-def process_results(doc: dict, results: List[str]) -> Dict[str, int]:
-    retval = 0
-    response = results[0]
+def _dollar_delimited_answer_candidates(text: str) -> List[str]:
+    """Extract math answer candidates from LaTeX delimiters.
 
-    # Try to extract answer from $...$ format first
-    indices = [pos for pos, char in enumerate(response) if char == "$"]
-    if len(indices) <= 1:
-        answer = response
-    else:
-        answer = response[indices[0] + 1 : indices[-1]]
+    Uses the span between the second-to-last and last single ``$``, and the last
+    non-empty ``$$ ... $$`` display block when ``$$`` is used.
+    """
+    out: List[str] = []
+    dollar_pos = [i for i, ch in enumerate(text) if ch == "$"]
+    if len(dollar_pos) >= 2:
+        span = text[dollar_pos[-2] + 1 : dollar_pos[-1]]
+        if span.strip():
+            out.append(span)
 
-    # Extract from \\boxed{} if present
+    if "$$" in text:
+        last_block = None
+        for m in re.finditer(r"\$\$(.+?)\$\$", text, flags=re.DOTALL):
+            inner = m.group(1).strip()
+            if inner:
+                last_block = inner
+        if last_block is not None:
+            out.append(last_block)
+
+    return out
+
+
+def _dedupe_preserve(xs: List[str]) -> List[str]:
+    return list(dict.fromkeys(x for x in xs if x is not None and str(x).strip()))
+
+
+def _strip_rhs_fences(rhs: str) -> str:
+    """Trim trailing punctuation and stray `$` models often emit after ``= …``."""
+    s = rhs.strip()
+    while s and s[-1] in ".,;!?":
+        s = s[:-1].strip()
+    while s.endswith("$"):
+        s = s[:-1].strip()
+    while s.startswith("$"):
+        s = s[1:].strip()
+    return s.strip()
+
+
+def _equals_rhs_candidates_from(parts: List[str]) -> List[str]:
+    """Add RHS of the last `=` in strings that contain one (chains like ``a = b = 277``).
+
+    Coaches/Gemma often omit ``\\boxed{}`` and wrap the verdict in `$… = \\cdots = 077$`; the penultimate/`$$`
+    span then still contains the full chain, which does not normalize to bare integer gold.
+    """
+    out: List[str] = []
+    for t in parts:
+        if not t or "=" not in t:
+            continue
+        rhs = _strip_rhs_fences(t.rsplit("=", 1)[-1])
+        if rhs:
+            out.append(rhs)
+    return out
+
+
+def _exact_match_one(doc: dict, response: str) -> int:
+    answer_key = next(k for k in doc.keys() if k.lower() == "answer")
+    target = str(doc[answer_key])
+
+    candidates: List[str] = []
+
     boxed_answer = last_boxed_only_string(response)
     if boxed_answer is not None:
         try:
             boxed_content = remove_boxed(boxed_answer)
-            if boxed_content is not None:
-                answer = boxed_content
+            if boxed_content is not None and str(boxed_content).strip():
+                candidates.append(boxed_content)
         except (AssertionError, IndexError):
             pass
 
-    # Check if answer matches target
-    answer_key = next(k for k in doc.keys() if k.lower() == "answer")
-    target = str(doc[answer_key])
-    if is_equiv(answer, target):
-        retval = 1
+    candidates.extend(_dollar_delimited_answer_candidates(response))
+    candidates.append(response)
+    candidates.extend(_equals_rhs_candidates_from(candidates))
 
-    return {"exact_match": retval}
+    for answer in _dedupe_preserve(candidates):
+        if is_equiv(answer, target):
+            return 1
+    return 0
+
+
+def process_results(
+    doc: dict, results: List[Union[str, List[str]]]
+) -> Dict[str, float]:
+    """If the default filter keeps K repeats (list of strings), score each and return the mean (avg@K)."""
+    first = results[0]
+    if isinstance(first, list):
+        if not first:
+            return {"exact_match": 0.0}
+        scores = [_exact_match_one(doc, r) for r in first]
+        return {"exact_match": sum(scores) / len(scores)}
+    return {"exact_match": float(_exact_match_one(doc, first))}
 
 
 # string normalization from https://github.com/EleutherAI/lm-evaluation-harness/blob/master/lm_eval/tasks/hendrycks_math.py
