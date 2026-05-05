@@ -20,9 +20,7 @@ uv run lm_eval \
         repetition_penalty=1.0 \
         max_gen_toks=32000 \
     --apply_chat_template \
-    --limit 1 \
     --num_fewshot 0 \
     --batch_size auto \
     --confirm_run_unsafe_code \
-    -o results \
-    -s
+    -o results

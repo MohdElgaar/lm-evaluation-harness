@@ -17,9 +17,7 @@ uv run lm_eval \
         top_k=64 \
         max_gen_toks=32000 \
     --apply_chat_template \
-    --limit 2 \
     --num_fewshot 0 \
     --batch_size auto \
     --confirm_run_unsafe_code \
-    -o results \
-    -s
+    -o results
