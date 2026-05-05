@@ -65,6 +65,26 @@ if TYPE_CHECKING:
 eval_logger = logging.getLogger(__name__)
 
 
+def _pin_vllm_worker_visible_device(local_dp_rank: int, dp_size: int) -> None:
+    """
+    Multiprocess workers must each own one GPU. Do not rely on vLLM offline DP env
+    (VLLM_DP_*): vLLM V1 rejects that for dense models; lm-eval shards work across
+    independent engines instead.
+    """
+    cvd = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if cvd:
+        devices = [x.strip() for x in cvd.split(",") if x.strip()]
+        if len(devices) >= dp_size:
+            os.environ["CUDA_VISIBLE_DEVICES"] = devices[local_dp_rank]
+        elif dp_size > 1:
+            eval_logger.warning(
+                "CUDA_VISIBLE_DEVICES lists fewer devices than data_parallel_size; "
+                "workers may share GPUs and run out of memory."
+            )
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(local_dp_rank)
+
+
 def _vllm_mp_worker(
     model_args: dict,
     sampling_params: list[SamplingParams],
@@ -86,10 +106,7 @@ def _vllm_mp_worker(
         result_queue.put((local_dp_rank, []))
         return None
 
-    os.environ["VLLM_DP_RANK"] = os.environ["VLLM_DP_RANK_LOCAL"] = str(local_dp_rank)
-    os.environ["VLLM_DP_SIZE"] = str(dp_size)
-    os.environ["VLLM_DP_MASTER_IP"] = str(dp_master_ip)
-    os.environ["VLLM_DP_MASTER_PORT"] = str(dp_master_port)
+    _pin_vllm_worker_visible_device(local_dp_rank, dp_size)
 
     llm = None
     try:
@@ -98,6 +115,7 @@ def _vllm_mp_worker(
             [TokensPrompt(prompt_token_ids=request) for request in requests],
             sampling_params=sampling_params,
             lora_request=lora_request,
+            use_tqdm=local_dp_rank == 0,
         )
         # Give engines time to pause their processing loops before exiting."
         sleep(1)
@@ -190,7 +208,6 @@ class VLLM(TemplateLM):
             "tensor_parallel_size": int(tensor_parallel_size),
             "max_model_len": int(self._max_length) if self._max_length else None,
             "max_num_seqs": kwargs.get("max_num_seqs", max_batch_size),
-            "swap_space": int(swap_space),
             "quantization": quantization,
             "seed": int(seed),
             "enable_lora": bool(lora_local_path),
