@@ -206,6 +206,8 @@ class StopWordPercentageChecker(Instruction):
 		"""Checks if the response contains the expected percentage of stop words."""
 		num_words = instructions_util.count_words(value)
 		num_stopwords = instructions_util.count_stopwords(value)
+		if num_words == 0:
+			return False
 		stopword_percentage = (num_stopwords / num_words) * 100
 		return stopword_percentage <= self._percentage
 
@@ -421,6 +423,8 @@ class NGramOverlapChecker(Instruction):
 		n = 3
 		ngrams = set(nltk.ngrams(value, n))
 		ref_ngrams = set(nltk.ngrams(self._reference_text, n))
+		if not ngrams:
+			return False
 		overlap = len(ngrams.intersection(ref_ngrams)) / len(ngrams)
 		return self._percentage - 2 <= overlap * 100 <= self._percentage + 2
 
@@ -482,6 +486,8 @@ class AlphabetLoopChecker(Instruction):
 		value = value.translate(str.maketrans('', '', string.punctuation))
 		words = value.strip(''.join(string.punctuation) + ' ').split()
 		alphabet = string.ascii_lowercase
+		if not words:
+			return False
 		correct_letter = words[0][0].lower()
 		if correct_letter not in alphabet:  # numbers are fails
 			return False
@@ -1165,8 +1171,12 @@ class LastWordFirstNextChecker(Instruction):
 		"""Checks if the last word of each sentence in the response is the first word of the next sentence."""
 		sentences = instructions_util.split_into_sentences(value)
 		for i in range(len(sentences) - 1):
-			last_word = sentences[i].rstrip(''.join(string.punctuation) + ' ').split()[-1]
-			first_word = sentences[i + 1].lstrip(''.join(string.punctuation) + ' ').split()[0]
+			prev_words = sentences[i].rstrip(''.join(string.punctuation) + ' ').split()
+			next_words = sentences[i + 1].lstrip(''.join(string.punctuation) + ' ').split()
+			if not prev_words or not next_words:
+				return False
+			last_word = prev_words[-1]
+			first_word = next_words[0]
 			if last_word.lower() != first_word.lower():
 				return False
 		return True
@@ -1329,7 +1339,10 @@ class QuoteExplanationChecker(Instruction):
 		value = ''.join(value.split())  # remove all whitespace
 		if '""' in value:
 			return False
-		if value.strip(string.digits + string.punctuation.replace('"', ''))[-1] == '"':
+		stripped_value = value.strip(string.digits + string.punctuation.replace('"', ''))
+		if not stripped_value:
+			return False
+		if stripped_value[-1] == '"':
 			return False
 		return True
 
