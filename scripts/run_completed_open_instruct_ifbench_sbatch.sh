@@ -137,6 +137,10 @@ while [ "$#" -gt 0 ]; do
       MODE="run-manifest"
       shift
       ;;
+    --run-all)
+      MODE="run-all"
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -1071,8 +1075,12 @@ main() {
   fi
 
   local manifest
-  manifest="${MANIFEST_PATH:-${MANIFEST_DIR}/ifbench_completed_$(date -u +'%Y%m%dT%H%M%SZ').tsv}"
-  build_manifest "${manifest}"
+  if [ -n "${MANIFEST_PATH:-}" ] && [ -f "${MANIFEST_PATH}" ]; then
+    manifest="${MANIFEST_PATH}"
+  else
+    manifest="${MANIFEST_DIR}/ifbench_completed_$(date -u +'%Y%m%dT%H%M%SZ').tsv"
+    build_manifest "${manifest}"
+  fi
 
   if [ "${MODE}" = "list" ]; then
     print_manifest "${manifest}"

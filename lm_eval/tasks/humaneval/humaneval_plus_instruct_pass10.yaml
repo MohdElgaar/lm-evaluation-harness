@@ -1,0 +1,15 @@
+include: humaneval_plus_instruct.yaml
+task: humaneval_plus_instruct_pass10
+repeats: 10
+metric_list:
+  - metric: !function utils.pass_at_k
+    aggregation: mean
+    higher_is_better: true
+    k: [1, 10]
+generation_kwargs:
+  until: []
+  max_gen_toks: 32768
+  do_sample: true
+  temperature: 0.6
+metadata:
+  version: 4.0

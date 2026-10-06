@@ -1,5 +1,5 @@
 import re
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import datasets
 
@@ -58,6 +58,39 @@ def _equals_rhs_candidates_from(parts: List[str]) -> List[str]:
     return out
 
 
+def _safe_unboxed(text: Optional[str]) -> Optional[str]:
+    """Return the contents of the last ``\\boxed{...}`` / ``\\fbox{...}`` in ``text``, if any."""
+    if not text:
+        return None
+    boxed = last_boxed_only_string(text)
+    if boxed is None:
+        return None
+    try:
+        return remove_boxed(boxed)
+    except Exception:
+        return None
+
+
+def _answer_candidates(raw: str) -> List[str]:
+    """Collect answer strings from model output, preferring ``\\boxed{}`` when present."""
+    candidates: List[str] = []
+
+    boxed = _safe_unboxed(raw)
+    if boxed is not None:
+        candidates.append(boxed)
+
+    dollar_cands = _dollar_delimited_answer_candidates(raw)
+    candidates.extend(dollar_cands)
+    for cand in dollar_cands:
+        unboxed = _safe_unboxed(cand)
+        if unboxed is not None:
+            candidates.append(unboxed)
+
+    candidates.append(raw)
+    candidates.extend(_equals_rhs_candidates_from(candidates))
+    return _dedupe_preserve(candidates)
+
+
 def process_docs(dataset: datasets.Dataset) -> datasets.Dataset:
     def _process_doc(doc: dict) -> dict:
         out_doc = {
@@ -74,13 +107,8 @@ def process_results(doc: dict, results: List[str]) -> Dict[str, int]:
     raw = results[0]
     gold = remove_boxed(last_boxed_only_string(doc["solution"]))
 
-    candidates: List[str] = []
-    candidates.extend(_dollar_delimited_answer_candidates(raw))
-    candidates.append(raw)
-    candidates.extend(_equals_rhs_candidates_from(candidates))
-
     retval = 0
-    for answer in _dedupe_preserve(candidates):
+    for answer in _answer_candidates(raw):
         if is_equiv(answer, gold):
             retval = 1
             break

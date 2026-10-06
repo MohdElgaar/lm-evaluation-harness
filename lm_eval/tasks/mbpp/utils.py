@@ -29,6 +29,26 @@ def pass_at_1(
     )[0]["pass@1"]
 
 
+def pass_at_k_scores(
+    references: Union[str, list[str]],
+    predictions: Union[str, list[list[str]]],
+    k: list[int] = None,
+):
+    """Multi-k pass@k metric (returns a dict like {"pass@1": ..., "pass@10": ...})."""
+    if isinstance(references, str):
+        references = [references]
+    if isinstance(predictions[0], str):
+        predictions = [[p] for p in predictions]
+    assert k is not None
+    if isinstance(k, int):
+        k = [k]
+    return pass_at_k.compute(
+        references=references,
+        predictions=predictions,
+        k=k,
+    )[0]
+
+
 def extract_code_blocks(text: str) -> str:
     # Pattern to match ```...``` blocks
     pattern = r"```(?:\w+)?\n?(.*?)\n?```"

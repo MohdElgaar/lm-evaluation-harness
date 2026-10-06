@@ -1,0 +1,22 @@
+include: mbpp_plus_instruct.yaml
+task: mbpp_plus_instruct_pass10
+repeats: 10
+metric_list:
+  - metric: !function utils.pass_at_k_scores
+    aggregation: mean
+    higher_is_better: true
+    k: [1, 10]
+generation_kwargs:
+  max_gen_toks: 32768
+  until: []
+  do_sample: true
+  temperature: 0.6
+filter_list:
+  - name: extract_code
+    filter:
+      - function: custom
+        filter_fn: !function utils.build_predictions
+      - function: take_first_k
+        k: 10
+metadata:
+  version: 1.0
